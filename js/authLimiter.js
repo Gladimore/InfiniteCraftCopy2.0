@@ -4,7 +4,7 @@ const authLimiter = async (req, res, next) => {
     authLimiter.authCounts || (authLimiter.authCounts = new Map());
   const now = Date.now();
   const maxRequests = 5;
-  const windowMs = 10 * 60 * 1000; // 10 minutes
+  const windowMs = 60 * 60 * 1000; // 60 minutes
 
   // Retrieve the current count or initialize it
   const count = authCounts.get(ip) || { requests: 0, timestamp: now };
