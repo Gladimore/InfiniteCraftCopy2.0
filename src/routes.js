@@ -69,6 +69,8 @@ router.post("/combine", authLimiter, async (req, res) => {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
+  authLimiter.reset();
+
   try {
     // Check for existing combination
     const previousCombination = await findCombination(element1, element2);
