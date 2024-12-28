@@ -1,32 +1,29 @@
-import express from "express";
+import { Router } from "express";
 import path from "path";
+import fs from "fs";
 import TogetherClient from "../js/TogetherClient.js";
 import updateUsedTokenCount from "../js/tokenIncrementor.js";
 import findCombination from "../js/findCombination.js";
 import addCombination from "../js/addCombination.js";
-import fs from "fs";
+import authLimiter from "../js/authLimiter.js";
 
-const router = express.Router();
+const router = Router();
 const client = new TogetherClient();
-
-const systemPrompt = fs.readFileSync(
-  joinPath("data/system_prompt.txt"),
-  "utf-8",
-);
-
-const chatHistory = [
-  {
-    role: "system",
-    content: systemPrompt,
-  },
-];
-
 const API_PASSWORD = process.env["API_PASSWORD"];
 
-function joinPath(filePath) {
-  return path.join(process.cwd(), filePath);
+// Cache for system prompt
+let systemPromptCache = null;
+
+// Function to read the system prompt (with caching)
+function getSystemPrompt() {
+  if (systemPromptCache) return systemPromptCache;
+
+  const filePath = path.join(process.cwd(), "data/system_prompt.txt");
+  systemPromptCache = fs.readFileSync(filePath, "utf-8");
+  return systemPromptCache;
 }
 
+// Helper to create user messages
 function makeUserMessage(element1, element2) {
   return {
     role: "user",
@@ -34,54 +31,21 @@ function makeUserMessage(element1, element2) {
   };
 }
 
-function makeMessages(userMessage) {
+// Helper to combine chat history with user message
+function makeMessages(chatHistory, userMessage) {
   return [...chatHistory, userMessage];
 }
 
-const authLimiter = async (req, res, next) => {
-  const ip = req.ip;
-  const authCounts =
-    authLimiter.authCounts || (authLimiter.authCounts = new Map());
-  const now = Date.now();
-  const max = 5;
-  const windowMs = 10 * 60 * 1000;
-
-  let count = authCounts.get(ip);
-  if (!count) {
-    count = { requests: 0, timestamp: now };
-  }
-
-  if (now - count.timestamp > windowMs) {
-    count.requests = 0;
-    count.timestamp = now;
-  }
-
-  if (count.requests >= max) {
-    const retryAfter = Math.ceil((count.timestamp + windowMs - now) / 1000);
-    res.set("Retry-After", retryAfter);
-    res.status(429).json({
-      error: "Too many incorrect password attempts. Please try again later.",
-    });
-    return;
-  }
-
-  count.requests++;
-  authCounts.set(ip, count);
-
-  next();
-};
-
-// Reset authentication rate limiter
-authLimiter.reset = (ip) => {
-  const authCounts = authLimiter.authCounts;
-  if (authCounts) {
-    authCounts.delete(ip);
-  }
-};
-
+// Function to combine elements using TogetherClient
 async function combineElements(element1, element2) {
+  const chatHistory = [
+    {
+      role: "system",
+      content: await getSystemPrompt(),
+    },
+  ];
   const combinationPrompt = makeUserMessage(element1, element2);
-  const messages = makeMessages(combinationPrompt);
+  const messages = makeMessages(chatHistory, combinationPrompt);
 
   const { message, total_tokens } = await client.send(messages);
 
@@ -95,38 +59,45 @@ async function combineElements(element1, element2) {
   return message;
 }
 
+// API route to handle combination requests
 router.post("/combine", authLimiter, async (req, res) => {
   const { element1, element2, password } = req.body;
 
+  // Authentication check
   if (password !== API_PASSWORD) {
-    console.log(password, API_PASSWORD);
+    console.log("Invalid password attempt:", password);
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  const previousCombination = await findCombination(element1, element2);
+  try {
+    // Check for existing combination
+    const previousCombination = await findCombination(element1, element2);
 
-  console.log(previousCombination);
+    if (!previousCombination) {
+      // Generate a new combination
+      const combination = await combineElements(element1, element2);
 
-  if (!previousCombination) {
-    const combination = await combineElements(element1, element2);
-    const newCombination = await addCombination(
-      combination,
-      element1,
-      element2,
-    );
-    console.log("New combination added:", newCombination);
+      // Save the new combination
+      const newCombination = await addCombination(
+        combination,
+        element1,
+        element2,
+      );
+      console.log("New combination added:", newCombination);
 
-    res.json({
-      combination: combination,
-    });
-  } else {
-    res.json({
-      combination: previousCombination.combination,
-    });
+      return res.json({ combination });
+    } else {
+      // Return the cached combination
+      return res.json({ combination: previousCombination.combination });
+    }
+  } catch (error) {
+    console.error("Error during combination process:", error);
+    res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
-router.use((req, res, next) => {
+// 404 handler
+router.use((req, res) => {
   res.sendStatus(404);
 });
 
