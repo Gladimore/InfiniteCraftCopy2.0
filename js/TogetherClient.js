@@ -5,14 +5,13 @@ const togetherAI = new Together({
 });
 
 class TogetherClient {
+  constructor(body) {
+    this.body = body;
+  }
+
   async send(messages) {
-    const response = await togetherAI.chat.completions.create({
-      messages: messages,
-      model: "meta-llama/Meta-Llama-3-8B-Instruct-Lite",
-      max_tokens: 512,
-      temperature: 1.1,
-      stream: false,
-    });
+    this.body.messages = messages;
+    const response = await togetherAI.chat.completions.create(this.body);
 
     const { usage, choices } = response;
     const { total_tokens } = usage;
