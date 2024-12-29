@@ -1,12 +1,12 @@
 import pgClient from "./pgClient.js";
 
-async function addCombination(combination, element1, element2) {
+async function addCombination(combination, element1, element2, emoji) {
   const client = await pgClient.connect();
   try {
     const result = await client.query(
       `INSERT INTO combinationstoring (combination, element1, element2) 
-       VALUES ($1, $2, $3) RETURNING *;`,
-      [combination, element1, element2], // Pass individual elements
+       VALUES ($1, $2, $3, $4) RETURNING *;`,
+      [combination, element1, element2, emoji], // Pass individual elements
     );
 
     return result.rows[0];
