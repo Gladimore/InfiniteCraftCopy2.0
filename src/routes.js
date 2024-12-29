@@ -6,9 +6,15 @@ import updateUsedTokenCount from "../js/tokenIncrementor.js";
 import findCombination from "../js/findCombination.js";
 import addCombination from "../js/addCombination.js";
 import authLimiter from "../js/authLimiter.js";
+import textToEmoji from "../js/textToEmoji.js";
 
 const router = Router();
-const client = new TogetherClient();
+const client = new TogetherClient({
+  model: "meta-llama/Meta-Llama-3-8B-Instruct-Lite",
+  max_tokens: 50,
+  temperature: 1.1,
+  stream: false,
+});
 const API_PASSWORD = process.env["API_PASSWORD"];
 
 // Cache for system prompt
@@ -41,7 +47,7 @@ async function combineElements(element1, element2) {
   const chatHistory = [
     {
       role: "system",
-      content: await getSystemPrompt(),
+      content: getSystemPrompt(),
     },
   ];
   const combinationPrompt = makeUserMessage(element1, element2);
@@ -69,8 +75,6 @@ router.post("/combine", authLimiter, async (req, res) => {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  authLimiter.reset(req.ip);
-
   try {
     // Check for existing combination
     const previousCombination = await findCombination(element1, element2);
@@ -78,19 +82,24 @@ router.post("/combine", authLimiter, async (req, res) => {
     if (!previousCombination) {
       // Generate a new combination
       const combination = await combineElements(element1, element2);
+      const emoji = await textToEmoji(combination);
 
       // Save the new combination
       const newCombination = await addCombination(
         combination,
         element1,
         element2,
+        emoji,
       );
       console.log("New combination added:", newCombination);
 
-      return res.json({ combination });
+      return res.json({ combination, emoji });
     } else {
       // Return the cached combination
-      return res.json({ combination: previousCombination.combination });
+      return res.json({
+        combination: previousCombination.combination,
+        emoji: previousCombination.emoji,
+      });
     }
   } catch (error) {
     console.error("Error during combination process:", error);
