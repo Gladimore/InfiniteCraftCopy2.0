@@ -1,11 +1,12 @@
 import { Router } from "express";
 import path from "path";
 import fs from "fs";
+import expressRateLimit from "express-rate-limit";
+
 import TogetherClient from "../js/TogetherClient.js";
 import updateUsedTokenCount from "../js/tokenIncrementor.js";
 import findCombination from "../js/findCombination.js";
 import addCombination from "../js/addCombination.js";
-import authLimiter from "../js/authLimiter.js";
 import textToEmoji from "../js/textToEmoji.js";
 
 const router = Router();
@@ -65,8 +66,16 @@ async function combineElements(element1, element2) {
   return message;
 }
 
+// Create rate limiter middleware using express-rate-limit
+const rateLimiter = expressRateLimit({
+  windowMs: 60 * 60000, // 1 minute
+  max: 5, // Limit each IP to 5 requests per windowMs
+  skip: (req) => req.body.password === API_PASSWORD, // Skip rate limiting if password is correct
+  message: "Too many requests, please try again later.", // Message when rate limit is exceeded
+});
+
 // API route to handle combination requests
-router.post("/combine", authLimiter, async (req, res) => {
+router.post("/combine", rateLimiter, async (req, res) => {
   const { element1, element2, password } = req.body;
 
   // Authentication check
@@ -89,7 +98,7 @@ router.post("/combine", authLimiter, async (req, res) => {
         combination,
         element1,
         element2,
-        emoji,
+        emoji
       );
       console.log("New combination added:", newCombination);
 
