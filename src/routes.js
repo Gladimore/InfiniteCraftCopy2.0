@@ -68,8 +68,8 @@ async function combineElements(element1, element2) {
 
 // Create rate limiter middleware using express-rate-limit
 const rateLimiter = expressRateLimit({
-  windowMs: 60 * 60000, // 1 minute
-  max: 2, // Limit each IP to 5 requests per windowMs
+  windowMs: 60 * 60000, // 60 minutes
+  max: 2, // Limit each IP to 2 requests per windowMs
   skip: (req) => req.body.password === API_PASSWORD, // Skip rate limiting if password is correct
   message: "Too many requests, please try again later.", // Message when rate limit is exceeded
 });
